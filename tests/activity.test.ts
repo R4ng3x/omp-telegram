@@ -1116,3 +1116,83 @@ test("createTelegramActivityRuntime rebindTarget updates event target and clears
   assert.deepEqual(toolEndEvent?.target, { chatId: 10, threadId: 30 });
   assert.equal(toolEndEvent?.replyToMessageId, undefined);
 });
+
+test("Activity normalizer ignores text_end arriving after the final segment", () => {
+  const events: TelegramActivityEvent[] = [];
+  const runtime = createTelegramActivityRuntime({
+    generation: "late-text-end",
+    dispatcher: {
+      dispatch: (e) => events.push(e),
+      stop: () => {},
+    },
+  });
+
+  runtime.onAgentStart({ chatId: 42 });
+  runtime.onAssistantEvent({ type: "text_start", contentIndex: 0 });
+  runtime.onAssistantMessageEnd("stop", "Hello");
+  runtime.onAssistantEvent({ type: "text_end", contentIndex: 0, content: "Hello" });
+  runtime.onAgentSettled();
+
+  const segments = events.filter(
+    (event): event is Extract<TelegramActivityEvent, { type: "assistant-segment" }> =>
+      event.type === "assistant-segment",
+  );
+  assert.equal(segments.length, 1);
+  assert.equal(segments[0]?.placement, "final");
+  assert.equal(segments[0]?.text, "Hello");
+});
+
+test("Activity normalizer flushes final segment when text_end precedes message end", () => {
+  const events: TelegramActivityEvent[] = [];
+  const runtime = createTelegramActivityRuntime({
+    generation: "normal-text-end",
+    dispatcher: {
+      dispatch: (e) => events.push(e),
+      stop: () => {},
+    },
+  });
+
+  runtime.onAgentStart({ chatId: 42 });
+  runtime.onAssistantEvent({ type: "text_start", contentIndex: 0 });
+  runtime.onAssistantEvent({ type: "text_end", contentIndex: 0, content: "Hello" });
+  runtime.onAssistantMessageEnd("stop");
+  runtime.onAgentSettled();
+
+  const segments = events.filter(
+    (event): event is Extract<TelegramActivityEvent, { type: "assistant-segment" }> =>
+      event.type === "assistant-segment",
+  );
+  assert.equal(segments.length, 1);
+  assert.equal(segments[0]?.placement, "final");
+  assert.equal(segments[0]?.text, "Hello");
+});
+
+test("Activity normalizer captures a new text block after the final segment", () => {
+  const events: TelegramActivityEvent[] = [];
+  const runtime = createTelegramActivityRuntime({
+    generation: "new-block-after-final",
+    dispatcher: {
+      dispatch: (e) => events.push(e),
+      stop: () => {},
+    },
+  });
+
+  runtime.onAgentStart({ chatId: 42 });
+  runtime.onAssistantEvent({ type: "text_start", contentIndex: 0 });
+  runtime.onAssistantMessageEnd("stop", "Hello");
+  runtime.onAssistantEvent({ type: "text_start", contentIndex: 1 });
+  runtime.onAssistantEvent({ type: "text_end", contentIndex: 1, content: "Follow-up." });
+  runtime.onAgentSettled();
+
+  const segments = events.filter(
+    (event): event is Extract<TelegramActivityEvent, { type: "assistant-segment" }> =>
+      event.type === "assistant-segment",
+  );
+  assert.deepEqual(
+    segments.map(({ text, placement }) => ({ text, placement })),
+    [
+      { text: "Hello", placement: "final" },
+      { text: "Follow-up.", placement: "terminal-partial" },
+    ],
+  );
+});

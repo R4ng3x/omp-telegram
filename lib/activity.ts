@@ -697,6 +697,12 @@ export function createTelegramActivityRuntime(deps: {
         return;
       }
       if (event.type === "text_end") {
+        // Some providers emit text_end after the assistant message already
+        // ended, when the final segment was flushed from fallbackText; ignore
+        // the late duplicate so it is not redelivered as terminal-partial.
+        // A genuinely new block still arrives via text_start first, which
+        // resets flushedFinalSegment.
+        if (flushedFinalSegment) return;
         pendingAssistantSegment = {
           contentIndex: event.contentIndex,
           text: event.content,
