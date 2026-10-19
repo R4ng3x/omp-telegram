@@ -2,8 +2,10 @@
 
 > Each release keeps at most 8 outcome records of at most 512 characters.
 
-## Unreleased
+## 0.6.17: OMP 18.12 Fixes
 
+- `No Duplicate Replies`: Replies could arrive twice with Anthropic models: the provider can emit `text_end` after the message ended, so the late text re-filled the pending segment and settlement delivered it again (tickernelz/omp-telegram#1). A `text_end` after the final segment is now ignored; a new text block still opens with `text_start`.
+- `No Bogus Voice Failure`: Plain and button-only replies logged `every voice synthesis provider failed` after the text was delivered (tickernelz/omp-telegram#3). A reply without voice artifacts now has nothing to send instead of failing.
 - `OMP 18.3 Settings Registry`: `/start`, `/status`, and `/model` rendered nothing on OMP 18.3 and newer because the enabled-model adapter still used the removed string-path `Settings` API. The adapter now uses registry handles when the host exposes them and keeps the string-path API for OMP 17.4.2 through 18.2.
 - `Delegated Status Context`: `/status` failed with an undefined `sessionManager` because OMP scopes each handler context through prototype delegation and the status builder spread it into a plain object. The builder now delegates to the handler context, so inherited members stay reachable.
 - `Pseudo-Path Commands`: OMP 18.4 bundled commands such as `/green` and MCP prompt commands carry `bundled:` or `mcp:` pseudo-paths, and sending one from Telegram retried forever on a missing template file. Only commands backed by an absolute template path now expand as prompt templates; the rest reach the agent as ordinary text.
