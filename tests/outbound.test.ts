@@ -970,6 +970,22 @@ test("Outbound artifact sender sends multiple voice replies independently", asyn
   dispose();
 });
 
+test("Outbound artifact sender treats a reply without voice artifacts as nothing to send", async () => {
+  const events: unknown[] = [];
+  const sendOutboundReplyArtifacts = createTelegramOutboundReplyArtifactSender({
+    execCommand: async () => ({ stdout: "", stderr: "", code: 0, killed: false }),
+    sendMultipart: async (method) => {
+      events.push(method);
+    },
+  });
+  await sendOutboundReplyArtifacts(
+    { chatId: 10, replyToMessageId: 20 },
+    { replyMarkup: { inline_keyboard: [[{ text: "Más", callback_data: "x" }]] } },
+    { replyToPrompt: true },
+  );
+  assert.deepEqual(events, []);
+});
+
 test("Voice reply sender prefers configured outbound voice handlers over registered synthesis providers", async () => {
   const events: unknown[] = [];
   const voiceTempDir = join(tmpdir(), "pi-telegram-voice-handler-test");

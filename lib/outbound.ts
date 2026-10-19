@@ -900,6 +900,8 @@ export function createTelegramOutboundReplyArtifactSender(
       : plan.voiceText
         ? [{ text: plan.voiceText, lang: plan.lang, rate: plan.rate }]
         : [];
+    // A reply without voice artifacts (plain text, buttons only) has nothing to deliver here.
+    if (voiceReplies.length === 0) return;
 
     let anyDelivered = false;
 
