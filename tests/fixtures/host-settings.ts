@@ -116,12 +116,23 @@ const createLegacyHostSettings: StubHostSettingsFactory = (cwd, values) =>
 const createTypedHostSettings: StubHostSettingsFactory = (cwd, values) =>
   new StubTypedHostSettings(cwd, values, createTypedHostSettings);
 
-export let settings: StubHostSettings = createLegacyHostSettings(process.cwd(), new Map());
+let instance: StubHostSettings = createLegacyHostSettings(process.cwd(), new Map());
+
+/**
+ * OMP exports its global `settings` as a Proxy with only a `get` trap that binds methods to the
+ * live instance, so `"method" in settings` is false even though every method is callable.
+ */
+export const settings = new Proxy({} as StubHostSettings, {
+  get(_target, prop) {
+    const value = (instance as unknown as Record<PropertyKey, unknown>)[prop];
+    return typeof value === "function" ? value.bind(instance) : value;
+  },
+});
 
 /** Switch the served host between the pre-18.3 string-path and the 18.3+ registry-handle settings API. */
 export function useHostSettingsApi(api: "legacy" | "typed"): void {
   const create = api === "typed" ? createTypedHostSettings : createLegacyHostSettings;
-  settings = create(process.cwd(), new Map());
+  instance = create(process.cwd(), new Map());
 }
 
 export function readHostSettingsWrites(): HostSettingsWrite[] {

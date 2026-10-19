@@ -276,14 +276,16 @@ type SettingsLifecycleHost = {
 /** OMP 18.3 replaced string-path settings access with registry handles addressed through this subpath. */
 const HOST_SETTINGS_REGISTRY_SPECIFIER: string = "@oh-my-pi/pi-coding-agent/config/registry";
 
+// OMP exports `settings` as a Proxy with only a `get` trap, so `in` reports false for every
+// method; probe with property reads instead.
 function isTypedSettingsHost(host: object): host is TypedSettingsHost {
-  return "rawValue" in host && typeof host.rawValue === "function"
-    && "writeValue" in host && typeof host.writeValue === "function";
+  const probe = host as Partial<Record<keyof TypedSettingsHost, unknown>>;
+  return typeof probe.rawValue === "function" && typeof probe.writeValue === "function";
 }
 
 function isLegacySettingsHost(host: object): host is LegacySettingsHost {
-  return "get" in host && typeof host.get === "function"
-    && "set" in host && typeof host.set === "function";
+  const probe = host as Partial<Record<keyof LegacySettingsHost, unknown>>;
+  return typeof probe.get === "function" && typeof probe.set === "function";
 }
 
 async function resolveEnabledModelsHandle(): Promise<unknown> {
