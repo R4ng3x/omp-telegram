@@ -273,9 +273,6 @@ type SettingsLifecycleHost = {
   flush(): void | PromiseLike<void>;
 };
 
-/** OMP 18.3 replaced string-path settings access with registry handles addressed through this subpath. */
-const HOST_SETTINGS_REGISTRY_SPECIFIER: string = "@oh-my-pi/pi-coding-agent/config/registry";
-
 // OMP exports `settings` as a Proxy with only a `get` trap, so `in` reports false for every
 // method; probe with property reads instead.
 function isTypedSettingsHost(host: object): host is TypedSettingsHost {
@@ -289,8 +286,13 @@ function isLegacySettingsHost(host: object): host is LegacySettingsHost {
 }
 
 async function resolveEnabledModelsHandle(): Promise<unknown> {
-  // The registry module exists only on OMP >= 18.3, so its specifier is resolved at runtime.
-  const registry: { lookup?: (id: string) => unknown } = await import(HOST_SETTINGS_REGISTRY_SPECIFIER);
+  // OMP >= 18.3 addresses settings through registry handles. Keep the specifier a string literal:
+  // OMP's extension loader maps literal host subpaths onto the running host module, while a
+  // computed specifier escapes to the plugin's own peer install, whose registry holds different
+  // (or no) handles than the live `settings` instance.
+  const registry = (await import("@oh-my-pi/pi-coding-agent/config/registry")) as {
+    lookup?: (id: string) => unknown;
+  };
   const handle = registry.lookup?.("enabledModels");
   if (handle === undefined) {
     throw new TypeError("Host settings registry does not define enabledModels.");

@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+## 0.6.19: Live Settings Registry
+
+- `Live Registry Handle`: `/start` and `/model` then failed with `Host settings registry does not define enabledModels.` The registry import used a computed specifier, which OMP's extension loader does not map, so it loaded the plugin's stale peer install instead of the running host. A string-literal import now resolves to the live host registry, whose handles match the live `settings` instance.
+
 ## 0.6.18: Proxy-Safe Settings Detection
 
 - `Menus On The Real Host`: `/start` and `/model` still did nothing on OMP 18.12 with `Host settings expose neither typed nor string-path enabled-model access.` OMP exports `settings` as a Proxy with only a `get` trap, so the `in` checks saw no methods. The adapter now probes the methods by reading them, and the test double serves settings through the same Proxy shape.
