@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+## 0.6.20: No Replies Replayed Across Runs
+
+- `Settled Stream Tail`: A reply could be sent again without a quote when the next prompt started, and the next reply could arrive twice: the stream tail (`text_delta`/`text_end`) can arrive after the run settled, which left a stale pending segment or opened an untargeted activity whose final was projected besides the Telegram final. Assistant stream events after settle are now ignored until the next run starts, and a Telegram run adopts its target when an event raced ahead of its start.
+
 ## 0.6.19: Live Settings Registry
 
 - `Live Registry Handle`: `/start` and `/model` then failed with `Host settings registry does not define enabledModels.` The registry import used a computed specifier, which OMP's extension loader does not map, so it loaded the plugin's stale peer install instead of the running host. A string-literal import now resolves to the live host registry, whose handles match the live `settings` instance.

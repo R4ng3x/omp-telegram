@@ -1196,3 +1196,65 @@ test("Activity normalizer captures a new text block after the final segment", ()
     ],
   );
 });
+
+test("Activity normalizer does not republish a reply whose stream tail arrives after settle", () => {
+  const events: TelegramActivityEvent[] = [];
+  const runtime = createTelegramActivityRuntime({
+    generation: "tail-after-settle",
+    dispatcher: {
+      dispatch: (e) => events.push(e),
+      stop: () => {},
+    },
+  });
+
+  runtime.onAgentStart({ chatId: 42 });
+  runtime.onAssistantEvent({ type: "text_start", contentIndex: 0 });
+  runtime.onAssistantMessageEnd("stop", "First reply");
+  runtime.onAgentSettled();
+  runtime.onAssistantEvent({ type: "text_delta", contentIndex: 0, delta: "First reply" });
+  runtime.onAssistantEvent({ type: "text_end", contentIndex: 0, content: "First reply" });
+
+  runtime.onAgentStart({ chatId: 42 });
+  runtime.onAssistantEvent({ type: "text_start", contentIndex: 0 });
+  runtime.onAssistantEvent({ type: "text_end", contentIndex: 0, content: "Second reply" });
+  runtime.onAssistantMessageEnd("stop");
+  runtime.onAgentSettled();
+
+  const segments = events.filter(
+    (event): event is Extract<TelegramActivityEvent, { type: "assistant-segment" }> =>
+      event.type === "assistant-segment",
+  );
+  assert.deepEqual(
+    segments.map(({ text, placement, source }) => ({ text, placement, source })),
+    [
+      { text: "First reply", placement: "final", source: "telegram" },
+      { text: "Second reply", placement: "final", source: "telegram" },
+    ],
+  );
+});
+
+test("Activity normalizer keeps a Telegram run targeted when a stream event races ahead of agent start", () => {
+  const events: TelegramActivityEvent[] = [];
+  const runtime = createTelegramActivityRuntime({
+    generation: "early-event",
+    dispatcher: {
+      dispatch: (e) => events.push(e),
+      stop: () => {},
+    },
+  });
+
+  runtime.onAssistantEvent({ type: "thinking_delta", contentIndex: 0, delta: "Thinking" });
+  runtime.onAgentStart({ chatId: 42 }, 7);
+  runtime.onAssistantEvent({ type: "text_start", contentIndex: 1 });
+  runtime.onAssistantEvent({ type: "text_end", contentIndex: 1, content: "Reply" });
+  runtime.onAssistantMessageEnd("stop");
+  runtime.onAgentSettled();
+
+  const segment = events.find(
+    (event): event is Extract<TelegramActivityEvent, { type: "assistant-segment" }> =>
+      event.type === "assistant-segment",
+  );
+  assert.equal(segment?.source, "telegram");
+  assert.deepEqual(segment?.target, { chatId: 42 });
+  assert.equal(segment?.replyToMessageId, 7);
+});

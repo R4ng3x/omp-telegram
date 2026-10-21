@@ -578,6 +578,12 @@ export function createTelegramActivityRuntime(deps: {
   let compactionInProgress = false;
   let compactionOwnedActivity = false;
   let uiPromptInProgress = false;
+  // Set once a run settles, cleared by the next agent start. Assistant stream
+  // events can still arrive after settle (the stream tail is delivered after
+  // message_end/agent_settled on some providers); without this latch a late
+  // event would open an implicit "unknown" activity or leave a stale pending
+  // segment that the next run republishes.
+  let settled = false;
   const ensureActivity = (
     activeTelegramTarget?: TelegramActivityTarget,
   ): string => {
@@ -674,14 +680,23 @@ export function createTelegramActivityRuntime(deps: {
       }
     },
     onAgentStart(activeTelegramTarget, replyToMessageId, promptText, contextInfo) {
+      settled = false;
       abandonCompaction();
       ensureActivity(activeTelegramTarget);
+      // An event that raced ahead of this hook opened the activity without a
+      // target; this run is Telegram-originated, so adopt the target instead
+      // of projecting its final reply a second time as an untargeted run.
+      if (activeTelegramTarget && activitySource === "unknown") {
+        activitySource = "telegram";
+        activityTarget = cloneActivityTarget(activeTelegramTarget);
+      }
       activityReplyToMessageId = activitySource === "telegram" ? replyToMessageId : undefined;
       const finalPrompt = promptText ?? pendingPromptText;
       pendingPromptText = undefined;
       emit({ type: "agent-start", promptText: finalPrompt, contextInfo });
     },
     onAssistantEvent(event) {
+      if (settled) return;
       if (event.type === "text_start") {
         flushedFinalSegment = false;
         flushPendingSegment("intermediate");
@@ -738,6 +753,7 @@ export function createTelegramActivityRuntime(deps: {
       if (event.type === "error") flushPendingSegment("terminal-partial");
     },
     onAssistantMessageEnd(stopReason, fallbackText) {
+      if (settled) return;
       if (stopReason === "aborted") {
         pendingAssistantSegment = undefined;
         flushedFinalSegment = false;
@@ -795,6 +811,7 @@ export function createTelegramActivityRuntime(deps: {
       flushPendingSegment("terminal-partial");
       emit({ type: "agent-settled" });
       clearActivity();
+      settled = true;
     },
     onSessionShutdown() {
       pendingInputSource = "unknown";
